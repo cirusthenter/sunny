@@ -65,18 +65,8 @@
   .stack{display:flex; width:100%; border-radius:5px; overflow:hidden; background:#eef1f7}
   .stack .seg{height:100%; display:block}
 
-  /* monthly */
-  .mrow{display:grid; grid-template-columns:52px 1fr; gap:14px; align-items:center; margin-bottom:12px}
-  .mrow .mname{font-weight:600; font-size:14px}
-  .mrow .mname small{display:block; color:var(--muted); font-weight:500; font-size:11px}
-  .mbar{position:relative}
-  .mbar .stack{height:30px}
-  .mbar .seg{position:relative; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:#fff; text-shadow:0 1px 1px rgba(0,0,0,.25); cursor:default}
-  .insight{background:#f0f6ff; border:1px solid #d8e7ff; color:#1e3a5f; padding:11px 14px; border-radius:10px; font-size:13px; margin-top:6px}
-
-  /* weekly (shares .mrow with monthly) */
-  .mrow.wk{grid-template-columns:96px 1fr; margin-bottom:7px}
-  .mrow.wk .mbar .stack{height:22px}
+  /* period line chart box */
+  .chartbox{margin:2px 0 8px}
 
   /* table */
   .tbl-wrap{overflow:auto; border:1px solid var(--line); border-radius:10px}
@@ -180,81 +170,17 @@
   <div class="cards" id="cards"></div>
 
   <div class="tabs" id="tabs">
-    <button data-view="table" class="active">📊 Daily · sortable</button>
-    <button data-view="weekly">📆 Weekly ratio</button>
-    <button data-view="monthly">📅 Monthly ratio</button>
-    <button data-view="trends">📈 Trends</button>
+    <button data-view="daily" class="active">📊 Daily</button>
+    <button data-view="weekly">📆 Weekly</button>
+    <button data-view="monthly">📅 Monthly</button>
     <button data-view="calendar">🗓️ Calendar heatmap</button>
     <button data-view="rankings">🏆 Rankings</button>
   </div>
 
-  <!-- DAILY TABLE -->
-  <section class="panel" id="view-table">
-    <h2>Daily appearance rates</h2>
-    <p class="desc">Click any column header to sort by that weather type. Click a row for a full breakdown.</p>
-    <div class="controls">
-      <div class="grp">Sort
-        <select id="sortKey">
-          <option value="date">Date (chronological)</option>
-          <option value="sunny" selected>Sunny 晴 %</option>
-          <option value="cloudy">Cloudy 曇 %</option>
-          <option value="rain">Rain 雨 %</option>
-          <option value="snow">Snow 雪 %</option>
-        </select>
-        <select id="sortDir">
-          <option value="desc" selected>High → Low</option>
-          <option value="asc">Low → High</option>
-        </select>
-      </div>
-      <div class="grp">Month
-        <select id="monthFilter"></select>
-      </div>
-      <input type="search" id="search" placeholder="Find date e.g. 7.4 or 07">
-      <div class="spacer"></div>
-      <span class="count" id="tableCount"></span>
-      <button class="btn" id="exportBtn">⤓ Export CSV</button>
-    </div>
-    <div class="tbl-wrap">
-      <table id="tbl">
-        <thead><tr id="thead"></tr></thead>
-        <tbody id="tbody"></tbody>
-      </table>
-    </div>
-  </section>
-
-  <!-- WEEKLY -->
-  <section class="panel hidden" id="view-weekly">
-    <h2>Average ratio by week</h2>
-    <p class="desc">Each bar is the average appearance rate across the seven days of that week — weeks run in 7-day blocks from Jan 1, and the final week absorbs the leftover day. Hover a segment for values.</p>
-    <div id="weekly"></div>
-    <div class="insight" id="weekInsight"></div>
-  </section>
-
-  <!-- MONTHLY -->
-  <section class="panel hidden" id="view-monthly">
-    <h2>Average ratio by month</h2>
-    <p class="desc">Each bar is the average appearance rate across the days of that month. Hover a segment for values.</p>
-    <div id="monthly"></div>
-    <div class="insight" id="monthInsight"></div>
-  </section>
-
-  <!-- TRENDS -->
-  <section class="panel hidden" id="view-trends">
-    <h2>Ratio trends</h2>
-    <p class="desc">How each weather type's appearance rate moves through the year. Switch the granularity; click a legend chip to show/hide a line. Hover the chart for values; on Daily, click a point for the full day.</p>
-    <div class="controls">
-      <div class="grp">Granularity
-        <select id="trendGran">
-          <option value="daily">Daily · 365 pts</option>
-          <option value="weekly">Weekly · 52 pts</option>
-          <option value="monthly">Monthly · 12 pts</option>
-        </select>
-      </div>
-      <div class="spacer"></div>
-    </div>
-    <div class="tlegend" id="trendLegend"></div>
-    <div id="trendChart"></div>
-  </section>
+  <!-- DAILY / WEEKLY / MONTHLY — line chart + sortable table, built by JS -->
+  <section class="panel" id="view-daily"></section>
+  <section class="panel hidden" id="view-weekly"></section>
+  <section class="panel hidden" id="view-monthly"></section>
 
   <!-- CALENDAR -->
   <section class="panel hidden" id="view-calendar">
@@ -299,24 +225,59 @@ const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','
 const MON_JA = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
 
 let DATA = [];
-let state = { view:'table', sortKey:'sunny', sortDir:'desc', monthFilter:0, heatMetric:'sunny', query:'', trendGran:'weekly', trendCats:{sunny:true,cloudy:true,rain:true,snow:true} };
+let state = {
+  view:'daily',
+  table:{
+    daily:{sortKey:'sunny', sortDir:'desc', monthFilter:0, query:''},
+    weekly:{sortKey:'sunny', sortDir:'desc', monthFilter:0, query:''},
+    monthly:{sortKey:'sunny', sortDir:'desc', monthFilter:0, query:''},
+  },
+  chartCats:{sunny:true, cloudy:true, rain:true, snow:true},
+  heatMetric:'sunny',
+};
 let dataSource = 'embedded';
 
+const MONFULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+const GRAN = {
+  daily:{
+    noun:'days', periodCol:'Date',
+    title:'Daily appearance rates',
+    desc:'Each row is one calendar day. The chart shows the year-round trend; click a column header to sort the table, or a row for a full breakdown.',
+    ph:'Find date e.g. 7.4 or 07',
+  },
+  weekly:{
+    noun:'weeks', periodCol:'Week',
+    title:'Weekly appearance rates',
+    desc:'Each row is a 7-day week within a month — Jan W1 = Jan 1–7, Jan W2 = Jan 8–14, and so on. Click a column header to sort, or a row for a breakdown.',
+    ph:'Find e.g. Jan or W1',
+  },
+  monthly:{
+    noun:'months', periodCol:'Month',
+    title:'Monthly appearance rates',
+    desc:'Each row is a calendar month, averaged over its days. Click a column header to sort, or a row for a breakdown.',
+    ph:'Find e.g. Jul',
+  },
+};
+
 /* ---------- utilities ---------- */
+function withStats(o){
+  o.sum = +(CATS.reduce((s,c)=>s+o[c.key],0)).toFixed(1);
+  let dom=CATS[0].key, dv=-1;
+  for(const c of CATS){ if(o[c.key]>dv){ dv=o[c.key]; dom=c.key; } }
+  o.dominant = dom;
+  return o;
+}
 function decorate(list){
   return list.map(r=>{
     const [m,d] = r.date.split('.').map(Number);
-    const sum = +(r.sunny+r.cloudy+r.rain+r.snow).toFixed(1);
-    let dom=CATS[0].key, dv=-1;
-    for(const c of CATS){ if(r[c.key]>dv){dv=r[c.key]; dom=c.key;} }
-    return {...r, m, d, sum, dominant:dom, label:`${MON[m-1]} ${d}`};
+    return withStats({...r, m, d, id:r.date, label:`${MON[m-1]} ${d}`, sub:r.date});
   });
 }
-function fmtLabel(r){ return `${MON[r.m-1]} ${r.d}`; }
-function dayTipHTML(r){
-  return `<b>${fmtLabel(r)}</b> <span style="color:#9aa8bd">(${r.date})</span>` +
+function periodTip(r){
+  return `<b>${r.label}</b> <span style="color:#9aa8bd">${r.sub||''}</span>` +
     CATS.map(c=>`<div class="tl"><span class="lft"><span class="dot" style="background:${c.color}"></span>${c.en} ${c.ja}</span><b>${r[c.key].toFixed(1)}%</b></div>`).join('') +
-    (r.sum<99.5 ? `<div class="tl" style="opacity:.6"><span class="lft">unclassified</span><b>${(100-r.sum).toFixed(1)}%</b></div>`:'');
+    (r.sum!=null && r.sum<99.5 ? `<div class="tl" style="opacity:.6"><span class="lft">unclassified</span><b>${(100-r.sum).toFixed(1)}%</b></div>` : '');
 }
 function stack(r, cls=''){
   return `<div class="stack ${cls}">` + CATS.map(c=>{
@@ -324,6 +285,8 @@ function stack(r, cls=''){
     return `<span class="seg" style="width:${v}%;background:${c.color}"></span>`;
   }).join('') + `</div>`;
 }
+function avg(key, list=DATA){ return list.reduce((s,r)=>s+r[key],0)/list.length; }
+function extreme(key, hi=true){ return DATA.reduce((a,b)=> (hi? b[key]>a[key] : b[key]<a[key]) ? b : a ); }
 
 /* ---------- data loading ---------- */
 function parseCSV(text){
@@ -359,10 +322,50 @@ function setData(list, source){
   renderAll();
 }
 
-/* ---------- summary ---------- */
-function avg(key, list=DATA){ return list.reduce((s,r)=>s+r[key],0)/list.length; }
-function extreme(key, hi=true){ return DATA.reduce((a,b)=> (hi? b[key]>a[key] : b[key]<a[key]) ? b : a ); }
+/* ---------- period datasets ---------- */
+function dailyRows(){ return DATA.slice().sort((a,b)=> a.m-b.m || a.d-b.d); }
+function weeklyRows(){
+  const out=[];
+  for(let m=1;m<=12;m++){
+    const days=DATA.filter(r=>r.m===m).sort((a,b)=>a.d-b.d);
+    if(!days.length) continue;
+    for(let i=0, wn=1; i<days.length; i+=7, wn++){
+      const chunk=days.slice(i,i+7);
+      const a=chunk[0].d, b=chunk[chunk.length-1].d;
+      const o={ m, wn, id:`${String(m).padStart(2,'0')}W${wn}`,
+        label:`${MON[m-1]} W${wn}`, sub:`${MON[m-1]} ${a}–${b}`, days:chunk.length };
+      for(const c of CATS) o[c.key]=avg(c.key,chunk);
+      out.push(withStats(o));
+    }
+  }
+  return out;
+}
+function monthlyRows(){
+  const out=[];
+  for(let m=1;m<=12;m++){
+    const days=DATA.filter(r=>r.m===m);
+    if(!days.length) continue;
+    const o={ m, id:`M${m}`, label:MONFULL[m-1], sub:MON_JA[m-1], days:days.length };
+    for(const c of CATS) o[c.key]=avg(c.key,days);
+    out.push(withStats(o));
+  }
+  return out;
+}
+function periodRows(gran){
+  return gran==='daily'?dailyRows() : gran==='weekly'?weeklyRows() : monthlyRows();
+}
+function chrono(gran,a,b){
+  if(gran==='daily') return a.m-b.m || a.d-b.d;
+  if(gran==='weekly') return a.m-b.m || a.wn-b.wn;
+  return a.m-b.m;
+}
+function rowHay(gran,r){
+  const p=[r.label, r.sub, r.id];
+  if(gran==='daily') p.push(`${r.m}.${r.d}`);
+  return p.join(' ').toLowerCase();
+}
 
+/* ---------- summary cards ---------- */
 function renderLegend(){
   document.getElementById('legend').innerHTML = CATS.map(c=>
     `<span class="item"><span class="dot" style="background:${c.color}"></span>${c.en} <span style="opacity:.7">${c.ja}</span></span>`
@@ -380,139 +383,138 @@ function renderCards(){
     const e=extreme(k,true);
     cards.push(`<div class="card day-jump" data-date="${e.date}" style="cursor:pointer">
       <div class="lbl">${lbl}</div>
-      <div class="big">${fmtLabel(e)}</div>
+      <div class="big">${e.label}</div>
       <div class="note">${CATMAP[k].en} ${e[k].toFixed(1)}%</div></div>`);
   }
   document.getElementById('cards').innerHTML = cards.join('');
-  document.querySelectorAll('.day-jump').forEach(el=>el.onclick=()=>openDetail(el.dataset.date));
+  document.querySelectorAll('.day-jump').forEach(el=>el.onclick=()=>openDay(el.dataset.date));
 }
 
-/* ---------- daily table ---------- */
-function renderThead(){
-  const cols=[['date','Date'],...CATS.map(c=>[c.key,`${c.en} ${c.ja}`])];
-  document.getElementById('thead').innerHTML =
-    `<th>#</th>` +
-    `<th class="sortable ${state.sortKey==='date'?'act':''}" data-k="date">Date <span class="arrow">${state.sortKey==='date'?(state.sortDir==='asc'?'▲':'▼'):'↕'}</span></th>` +
-    `<th>Ratio</th>` +
-    CATS.map(c=>`<th class="sortable num ${state.sortKey===c.key?'act':''}" data-k="${c.key}" style="text-align:right">${c.en} ${c.ja} <span class="arrow">${state.sortKey===c.key?(state.sortDir==='asc'?'▲':'▼'):'↕'}</span></th>`).join('');
-  document.querySelectorAll('#thead th.sortable').forEach(th=>{
-    th.onclick=()=>{
-      const k=th.dataset.k;
-      if(state.sortKey===k){ state.sortDir = state.sortDir==='asc'?'desc':'asc'; }
-      else { state.sortKey=k; state.sortDir = k==='date'?'asc':'desc'; }
-      syncControls(); renderTable();
-    };
-  });
+/* ---------- period tabs: line chart + sortable table ---------- */
+function buildGranPanel(gran){
+  const g=GRAN[gran];
+  const panel=document.getElementById('view-'+gran);
+  panel.innerHTML =
+    `<h2>${g.title}</h2>`+
+    `<p class="desc">${g.desc}</p>`+
+    `<div class="tlegend" id="legend-${gran}"></div>`+
+    `<div class="chartbox" id="chart-${gran}"></div>`+
+    `<div class="controls">`+
+      `<div class="grp">Sort `+
+        `<select class="c-sortKey">`+
+          `<option value="period">${g.periodCol} (chronological)</option>`+
+          CATS.map(c=>`<option value="${c.key}">${c.en} ${c.ja} %</option>`).join('')+
+        `</select>`+
+        `<select class="c-sortDir"><option value="desc">High → Low</option><option value="asc">Low → High</option></select>`+
+      `</div>`+
+      `<div class="grp">Month <select class="c-month"></select></div>`+
+      `<input type="search" class="c-search" placeholder="${g.ph}">`+
+      `<div class="spacer"></div>`+
+      `<span class="count c-count"></span>`+
+      `<button class="btn c-export">⤓ Export CSV</button>`+
+    `</div>`+
+    `<div class="tbl-wrap"><table><thead><tr class="c-thead"></tr></thead><tbody class="c-tbody"></tbody></table></div>`;
+  panel.querySelector('.c-month').innerHTML =
+    `<option value="0">All months</option>`+MON.map((m,i)=>`<option value="${i+1}">${m} ${MON_JA[i]}</option>`).join('');
+  const s=state.table[gran];
+  panel.querySelector('.c-sortKey').onchange=e=>{ s.sortKey=e.target.value; renderTableFor(gran); };
+  panel.querySelector('.c-sortDir').onchange=e=>{ s.sortDir=e.target.value; renderTableFor(gran); };
+  panel.querySelector('.c-month').onchange=e=>{ s.monthFilter=+e.target.value; renderTableFor(gran); };
+  panel.querySelector('.c-search').oninput=e=>{ s.query=e.target.value; renderTableFor(gran); };
+  panel.querySelector('.c-export').onclick=()=>exportCSV(gran);
 }
-function currentRows(){
-  let rows=DATA.slice();
-  if(state.monthFilter) rows=rows.filter(r=>r.m===state.monthFilter);
-  if(state.query){
-    const q=state.query.trim().replace(/\//g,'.').replace(/\s/g,'');
-    rows=rows.filter(r=>{
-      const a=r.date, b=`${r.m}.${r.d}`, c=`${MON[r.m-1]}`.toLowerCase();
-      return a.includes(q)||b.includes(q)||c.includes(q.toLowerCase());
-    });
-  }
-  const k=state.sortKey, dir=state.sortDir==='asc'?1:-1;
-  rows.sort((a,b)=>{
-    if(k==='date') return (a.m-b.m || a.d-b.d)*dir;
-    return (a[k]-b[k] || a.m-b.m || a.d-b.d)*dir;
-  });
+function syncControls(gran){
+  const panel=document.getElementById('view-'+gran), s=state.table[gran];
+  panel.querySelector('.c-sortKey').value=s.sortKey;
+  panel.querySelector('.c-sortDir').value=s.sortDir;
+  panel.querySelector('.c-month').value=s.monthFilter;
+  panel.querySelector('.c-search').value=s.query;
+}
+function currentRows(gran){
+  const s=state.table[gran];
+  let rows=periodRows(gran);
+  if(s.monthFilter) rows=rows.filter(r=>r.m===s.monthFilter);
+  if(s.query){ const q=s.query.trim().toLowerCase().replace(/\//g,'.'); rows=rows.filter(r=>rowHay(gran,r).includes(q)); }
+  const k=s.sortKey, dir=s.sortDir==='asc'?1:-1;
+  rows.sort((a,b)=> (k==='period' ? chrono(gran,a,b) : (a[k]-b[k] || chrono(gran,a,b))) * dir);
   return rows;
 }
-function renderTable(){
-  renderThead();
-  const rows=currentRows();
-  document.getElementById('tableCount').textContent=`${rows.length} of ${DATA.length} days`;
-  const tb=document.getElementById('tbody');
+function renderTableFor(gran){
+  const s=state.table[gran], panel=document.getElementById('view-'+gran), g=GRAN[gran];
+  const thead=panel.querySelector('.c-thead');
+  thead.innerHTML =
+    `<th>#</th>`+
+    `<th class="sortable ${s.sortKey==='period'?'act':''}" data-k="period">${g.periodCol} <span class="arrow">${s.sortKey==='period'?(s.sortDir==='asc'?'▲':'▼'):'↕'}</span></th>`+
+    `<th>Ratio</th>`+
+    CATS.map(c=>`<th class="sortable num ${s.sortKey===c.key?'act':''}" data-k="${c.key}" style="text-align:right">${c.en} ${c.ja} <span class="arrow">${s.sortKey===c.key?(s.sortDir==='asc'?'▲':'▼'):'↕'}</span></th>`).join('');
+  thead.querySelectorAll('th.sortable').forEach(th=>{
+    th.onclick=()=>{
+      const k=th.dataset.k;
+      if(s.sortKey===k){ s.sortDir = s.sortDir==='asc'?'desc':'asc'; }
+      else { s.sortKey=k; s.sortDir = k==='period'?'asc':'desc'; }
+      syncControls(gran); renderTableFor(gran);
+    };
+  });
+  const rows=currentRows(gran);
+  panel.querySelector('.c-count').textContent = `${rows.length} of ${periodRows(gran).length} ${g.noun}`;
+  const byId={}; periodRows(gran).forEach(r=>byId[r.id]=r);
+  const tb=panel.querySelector('.c-tbody');
   tb.innerHTML = rows.map((r,i)=>{
     const cells=CATS.map(c=>{
       const strong = r.dominant===c.key ? 'maxcat' : '';
-      return `<td class="num ${strong}" style="${r.dominant===c.key?`color:${c.color}`:''}">${r[c.key].toFixed(1)}</td>`;
+      return `<td class="num ${strong}" style="${r.dominant===c.key?`color:${CATMAP[c.key].color}`:''}">${r[c.key].toFixed(1)}</td>`;
     }).join('');
-    return `<tr data-date="${r.date}" data-tip='${dayTipHTML(r)}'>
-      <td style="color:var(--muted)">${i+1}</td>
-      <td><b>${fmtLabel(r)}</b> <span style="color:var(--muted)">${r.date}</span></td>
-      <td class="bar">${stack(r)}</td>${cells}</tr>`;
+    return `<tr data-id="${r.id}" data-tip='${periodTip(r)}'>`+
+      `<td style="color:var(--muted)">${i+1}</td>`+
+      `<td><b>${r.label}</b> <span style="color:var(--muted)">${r.sub||''}</span></td>`+
+      `<td class="bar">${stack(r)}</td>${cells}</tr>`;
   }).join('');
-  tb.querySelectorAll('tr').forEach(tr=>tr.onclick=()=>openDetail(tr.dataset.date));
-}
-function syncControls(){
-  document.getElementById('sortKey').value=state.sortKey;
-  document.getElementById('sortDir').value=state.sortDir;
+  tb.querySelectorAll('tr').forEach(tr=>tr.onclick=()=>showDetail(byId[tr.dataset.id]));
 }
 
-/* ---------- monthly ---------- */
-function monthStats(){
-  const out=[];
-  for(let m=1;m<=12;m++){
-    const rows=DATA.filter(r=>r.m===m);
-    if(!rows.length) continue;
-    const o={m}; for(const c of CATS) o[c.key]=avg(c.key,rows);
-    out.push(o);
+/* ---------- period line chart ---------- */
+function monthTicks(pts){ const t=[]; let lm=0; pts.forEach((r,i)=>{ if(r.m!==lm){ t.push({i,label:MON[r.m-1]}); lm=r.m; } }); return t; }
+function renderChart(gran){
+  const pts=periodRows(gran), n=pts.length, on=state.chartCats;
+  const W=960, H=300, padL=40, padR=16, padT=12, padB=26;
+  const plotW=W-padL-padR, plotH=H-padT-padB;
+  const X=i=> padL + (n>1? i/(n-1):0.5)*plotW;
+  const Y=v=> padT + (1 - v/100)*plotH;
+  let grid='';
+  for(let v=0;v<=100;v+=25){
+    const y=Y(v).toFixed(1);
+    grid+=`<line class="grid" x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}"></line>`+
+          `<text class="axlbl" x="${padL-6}" y="${y}" text-anchor="end" dominant-baseline="middle">${v}%</text>`;
   }
-  return out;
-}
-function renderMonthly(){
-  const ms=monthStats();
-  document.getElementById('monthly').innerHTML = ms.map(o=>{
-    const tipRow={...o, date:'', m:o.m, d:0, sum:100};
-    const segs=CATS.map(c=>{
-      const v=o[c.key];
-      return `<span class="seg" style="width:${v}%;background:${c.color}" data-tip='<b>${MON[o.m-1]} — ${CATMAP[c.key].en} ${CATMAP[c.key].ja}</b><div class="tl"><span class="lft">monthly avg</span><b>${v.toFixed(1)}%</b></div>'>${v>=8?v.toFixed(0):''}</span>`;
-    }).join('');
-    return `<div class="mrow"><div class="mname">${MON[o.m-1]}<small>${MON_JA[o.m-1]}</small></div>
-      <div class="mbar"><div class="stack">${segs}</div></div></div>`;
-  }).join('');
-  // insight
-  const sunniest = ms.reduce((a,b)=>b.sunny>a.sunny?b:a);
-  const rainiest = ms.reduce((a,b)=>b.rain>a.rain?b:a);
-  const snowiest = ms.reduce((a,b)=>b.snow>a.snow?b:a);
-  document.getElementById('monthInsight').innerHTML =
-    `☀️ <b>${MON[sunniest.m-1]}</b> is the sunniest month (avg ${sunniest.sunny.toFixed(1)}% sunny). ` +
-    `🌧️ <b>${MON[rainiest.m-1]}</b> is the rainiest (avg ${rainiest.rain.toFixed(1)}% rain). ` +
-    `❄️ <b>${MON[snowiest.m-1]}</b> sees the most snow (avg ${snowiest.snow.toFixed(1)}%).`;
-}
-
-/* ---------- weekly ---------- */
-function weekRange(a,b){
-  const A=`${MON[a.m-1]} ${a.d}`;
-  return a.m===b.m ? `${A}–${b.d}` : `${A}–${MON[b.m-1]} ${b.d}`;
-}
-function weekStats(){
-  const days=DATA.slice().sort((a,b)=> a.m-b.m || a.d-b.d);
-  if(!days.length) return [];
-  const chunks=[];
-  for(let i=0;i<days.length;i+=7) chunks.push(days.slice(i,i+7));
-  // fold a short trailing week into the previous one so there's no lonely stub
-  if(chunks.length>1 && chunks[chunks.length-1].length<7){
-    chunks[chunks.length-2]=chunks[chunks.length-2].concat(chunks.pop());
+  const xlab=monthTicks(pts).map(t=>`<text class="axlbl" x="${X(t.i).toFixed(1)}" y="${H-padB+16}" text-anchor="middle">${t.label}</text>`).join('');
+  let lines='';
+  for(const c of CATS){
+    if(!on[c.key]) continue;
+    const d=pts.map((r,i)=>(i?'L':'M')+X(i).toFixed(1)+' '+Y(r[c.key]).toFixed(1)).join(' ');
+    lines+=`<path class="ln" d="${d}" stroke="${c.color}"></path>`;
+    if(n<=64) lines+=pts.map((r,i)=>`<circle class="mk" cx="${X(i).toFixed(1)}" cy="${Y(r[c.key]).toFixed(1)}" r="${n<=12?3:2.2}" fill="${c.color}"></circle>`).join('');
   }
-  return chunks.map((rows,i)=>{
-    const o={w:i+1, days:rows.length, m0:rows[0].m, range:weekRange(rows[0],rows[rows.length-1])};
-    for(const c of CATS) o[c.key]=avg(c.key,rows);
-    return o;
+  const half = n>1 ? plotW/(n-1)/2 : plotW/2;
+  let hits='';
+  for(let i=0;i<n;i++){
+    const cx=X(i), x=Math.max(padL, cx-half), w=Math.min(W-padR, cx+half)-x;
+    hits+=`<rect class="hit" data-i="${i}" x="${x.toFixed(1)}" y="${padT}" width="${w.toFixed(1)}" height="${plotH}" data-tip='${periodTip(pts[i])}'></rect>`;
+  }
+  document.getElementById('chart-'+gran).innerHTML =
+    `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img">${grid}${xlab}${lines}${hits}</svg>`;
+  document.querySelectorAll('#chart-'+gran+' .hit').forEach(el=>el.onclick=()=>showDetail(pts[+el.dataset.i]));
+  renderChartLegend(gran);
+}
+function renderChartLegend(gran){
+  const on=state.chartCats;
+  document.getElementById('legend-'+gran).innerHTML = CATS.map(c=>
+    `<span class="item ${on[c.key]?'':'off'}" data-cat="${c.key}"><span class="dot" style="background:${c.color}"></span>${c.en} <span style="opacity:.7">${c.ja}</span></span>`
+  ).join('');
+  document.querySelectorAll('#legend-'+gran+' .item').forEach(el=>el.onclick=()=>{
+    const k=el.dataset.cat;
+    if(on[k] && !CATS.some(c=>c.key!==k && on[c.key])) return;
+    on[k]=!on[k]; renderChart(gran);
   });
-}
-function renderWeekly(){
-  const ws=weekStats();
-  document.getElementById('weekly').innerHTML = ws.map(o=>{
-    const segs=CATS.map(c=>{
-      const v=o[c.key];
-      return `<span class="seg" style="width:${v}%;background:${c.color}" data-tip='<b>W${o.w} · ${o.range} — ${CATMAP[c.key].en} ${CATMAP[c.key].ja}</b><div class="tl"><span class="lft">weekly avg</span><b>${v.toFixed(1)}%</b></div>'>${v>=8?v.toFixed(0):''}</span>`;
-    }).join('');
-    return `<div class="mrow wk"><div class="mname">W${o.w}<small>${o.range}</small></div>
-      <div class="mbar"><div class="stack">${segs}</div></div></div>`;
-  }).join('');
-  // insight
-  const sunniest = ws.reduce((a,b)=>b.sunny>a.sunny?b:a);
-  const rainiest = ws.reduce((a,b)=>b.rain>a.rain?b:a);
-  const snowiest = ws.reduce((a,b)=>b.snow>a.snow?b:a);
-  document.getElementById('weekInsight').innerHTML =
-    `☀️ <b>W${sunniest.w}</b> (${sunniest.range}) is the sunniest week (avg ${sunniest.sunny.toFixed(1)}% sunny). ` +
-    `🌧️ <b>W${rainiest.w}</b> (${rainiest.range}) is the rainiest (avg ${rainiest.rain.toFixed(1)}% rain). ` +
-    `❄️ <b>W${snowiest.w}</b> (${snowiest.range}) sees the most snow (avg ${snowiest.snow.toFixed(1)}%).`;
 }
 
 /* ---------- calendar heatmap ---------- */
@@ -533,12 +535,11 @@ function renderCalendar(){
     for(let d=1;d<=31;d++){
       const r=map[`${m}-${d}`];
       if(!r){ html+=`<div class="cell empty"></div>`; continue; }
-      html+=`<div class="cell on" style="background:${heatColor(r[metric],max,base)}" data-date="${r.date}" data-tip='${dayTipHTML(r)}'></div>`;
+      html+=`<div class="cell on" style="background:${heatColor(r[metric],max,base)}" data-date="${r.date}" data-tip='${periodTip(r)}'></div>`;
     }
   }
   document.getElementById('calgrid').innerHTML=html;
-  document.querySelectorAll('#calgrid .cell.on').forEach(c=>c.onclick=()=>openDetail(c.dataset.date));
-  // scale
+  document.querySelectorAll('#calgrid .cell.on').forEach(c=>c.onclick=()=>openDay(c.dataset.date));
   const grad=`linear-gradient(90deg, ${heatColor(0,max,base)}, ${heatColor(max,max,base)})`;
   document.getElementById('calscale').innerHTML=
     `<span>Low (0%)</span><div class="scalebar" style="background:${grad}"></div><span>High (${max.toFixed(0)}%)</span>
@@ -550,115 +551,46 @@ function renderRankings(){
   const N=12;
   document.getElementById('ranks').innerHTML = CATS.map(c=>{
     const top=DATA.slice().sort((a,b)=>b[c.key]-a[c.key]).slice(0,N);
-    const rows=top.map((r,i)=>`<div class="rankrow" data-date="${r.date}" data-tip='${dayTipHTML(r)}'>
-        <span class="r">${i+1}</span><span>${fmtLabel(r)}</span>${stack(r)}<span class="v" style="color:${c.color}">${r[c.key].toFixed(0)}%</span>
+    const rows=top.map((r,i)=>`<div class="rankrow" data-date="${r.date}" data-tip='${periodTip(r)}'>
+        <span class="r">${i+1}</span><span>${r.label}</span>${stack(r)}<span class="v" style="color:${c.color}">${r[c.key].toFixed(0)}%</span>
       </div>`).join('');
     return `<div class="rankcol"><h3><span class="dot" style="background:${c.color}"></span>Most ${c.en} ${c.ja}</h3>${rows}</div>`;
   }).join('');
-  document.querySelectorAll('#ranks .rankrow').forEach(el=>el.onclick=()=>openDetail(el.dataset.date));
-}
-
-/* ---------- trends (line charts) ---------- */
-function trendTipHTML(title, o){
-  return `<b>${title}</b>` + CATS.map(c=>
-    `<div class="tl"><span class="lft"><span class="dot" style="background:${c.color}"></span>${c.en} ${c.ja}</span><b>${o[c.key].toFixed(1)}%</b></div>`
-  ).join('');
-}
-function trendSeries(gran){
-  if(gran==='monthly'){
-    const ms=monthStats();
-    return {pts:ms, ticks:ms.map((o,i)=>({i,label:MON[o.m-1]})),
-      title:i=>`${MON[ms[i].m-1]} ${MON_JA[ms[i].m-1]}`, date:i=>null};
-  }
-  if(gran==='weekly'){
-    const ws=weekStats(); const ticks=[]; let lm=0;
-    ws.forEach((o,i)=>{ if(o.m0!==lm){ ticks.push({i,label:MON[o.m0-1]}); lm=o.m0; } });
-    return {pts:ws, ticks, title:i=>`W${ws[i].w} · ${ws[i].range}`, date:i=>null};
-  }
-  const pts=DATA.slice().sort((a,b)=> a.m-b.m || a.d-b.d); const ticks=[]; let lm=0;
-  pts.forEach((r,i)=>{ if(r.m!==lm){ ticks.push({i,label:MON[r.m-1]}); lm=r.m; } });
-  return {pts, ticks, title:i=>`${MON[pts[i].m-1]} ${pts[i].d} (${pts[i].date})`, date:i=>pts[i].date};
-}
-function renderTrends(){
-  const gran=state.trendGran, on=state.trendCats;
-  const {pts,ticks,title,date}=trendSeries(gran);
-  const n=pts.length;
-  const W=960,H=360,padL=40,padR=16,padT=12,padB=26;
-  const plotW=W-padL-padR, plotH=H-padT-padB;
-  const X=i=> padL + (n>1? i/(n-1):0.5)*plotW;
-  const Y=v=> padT + (1 - v/100)*plotH;
-  // y gridlines + labels
-  let grid='';
-  for(let v=0;v<=100;v+=25){
-    const y=Y(v).toFixed(1);
-    grid+=`<line class="grid" x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}"></line>`+
-          `<text class="axlbl" x="${padL-6}" y="${y}" text-anchor="end" dominant-baseline="middle">${v}%</text>`;
-  }
-  // x labels
-  const xlab=ticks.map(t=>`<text class="axlbl" x="${X(t.i).toFixed(1)}" y="${H-padB+16}" text-anchor="middle">${t.label}</text>`).join('');
-  // lines + markers
-  let lines='';
-  for(const c of CATS){
-    if(!on[c.key]) continue;
-    const d=pts.map((r,i)=>(i?'L':'M')+X(i).toFixed(1)+' '+Y(r[c.key]).toFixed(1)).join(' ');
-    lines+=`<path class="ln" d="${d}" stroke="${c.color}"></path>`;
-    if(n<=53) lines+=pts.map((r,i)=>`<circle class="mk" cx="${X(i).toFixed(1)}" cy="${Y(r[c.key]).toFixed(1)}" r="${n<=12?3:2.3}" fill="${c.color}"></circle>`).join('');
-  }
-  // transparent hover columns
-  const half = n>1 ? plotW/(n-1)/2 : plotW/2;
-  let hits='';
-  for(let i=0;i<n;i++){
-    const cx=X(i), x=Math.max(padL, cx-half), w=Math.min(W-padR, cx+half)-x, dt=date(i);
-    hits+=`<rect class="hit" x="${x.toFixed(1)}" y="${padT}" width="${w.toFixed(1)}" height="${plotH}" ${dt?`data-date="${dt}"`:''} data-tip='${trendTipHTML(title(i), pts[i])}'></rect>`;
-  }
-  document.getElementById('trendChart').innerHTML =
-    `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img">${grid}${xlab}${lines}${hits}</svg>`;
-  if(gran==='daily') document.querySelectorAll('#trendChart .hit[data-date]').forEach(el=>el.onclick=()=>openDetail(el.dataset.date));
-  renderTrendLegend();
-}
-function renderTrendLegend(){
-  const on=state.trendCats;
-  document.getElementById('trendLegend').innerHTML = CATS.map(c=>
-    `<span class="item ${on[c.key]?'':'off'}" data-cat="${c.key}"><span class="dot" style="background:${c.color}"></span>${c.en} <span style="opacity:.7">${c.ja}</span></span>`
-  ).join('');
-  document.querySelectorAll('#trendLegend .item').forEach(el=>el.onclick=()=>{
-    const k=el.dataset.cat;
-    // keep at least one line visible
-    if(on[k] && !CATS.some(c=>c.key!==k && on[c.key])) return;
-    on[k]=!on[k]; renderTrends();
-  });
+  document.querySelectorAll('#ranks .rankrow').forEach(el=>el.onclick=()=>openDay(el.dataset.date));
 }
 
 /* ---------- detail modal ---------- */
-function openDetail(date){
-  const r=DATA.find(x=>x.date===date); if(!r) return;
+function showDetail(r){
+  if(!r) return;
   let acc=0; const stops=[];
   for(const c of CATS){ const v=r[c.key]; if(v>0){ stops.push(`${c.color} ${acc}% ${acc+v}%`); acc+=v; } }
   if(acc<100) stops.push(`#eef1f7 ${acc}% 100%`);
   const donut=`conic-gradient(${stops.join(',')})`;
+  const dom=r.dominant;
   const rows=CATS.map(c=>`<div class="row"><span class="dot" style="background:${c.color}"></span>
       <span class="nm">${c.en} <span style="color:var(--muted)">${c.ja}</span></span>
       <span class="vv">${r[c.key].toFixed(1)}%</span></div>`).join('');
   document.getElementById('modalBody').innerHTML=`
-    <h3>${fmtLabel(r)}</h3>
-    <div class="mdate">${r.date} · dominant: <b style="color:${CATMAP[r.dominant].color}">${CATMAP[r.dominant].en} ${CATMAP[r.dominant].ja}</b></div>
+    <h3>${r.label}</h3>
+    <div class="mdate">${r.sub?`${r.sub} · `:''}dominant: <b style="color:${CATMAP[dom].color}">${CATMAP[dom].en} ${CATMAP[dom].ja}</b></div>
     <div class="donutwrap">
-      <div class="donut" style="background:${donut}"><div class="dlbl"><b style="color:${CATMAP[r.dominant].color}">${r[r.dominant].toFixed(0)}%</b><span>${CATMAP[r.dominant].en}</span></div></div>
+      <div class="donut" style="background:${donut}"><div class="dlbl"><b style="color:${CATMAP[dom].color}">${r[dom].toFixed(0)}%</b><span>${CATMAP[dom].en}</span></div></div>
       <div class="mstats">${rows}</div>
     </div>`;
   document.getElementById('modal').classList.add('show');
 }
+function openDay(date){ showDetail(DATA.find(x=>x.date===date)); }
 function closeModal(){ document.getElementById('modal').classList.remove('show'); }
 
 /* ---------- export ---------- */
-function exportCSV(){
-  const rows=currentRows();
-  const head='date,'+CATS.map(c=>c.en).join(',');
-  const body=rows.map(r=>[r.date,...CATS.map(c=>r[c.key])].join(',')).join('\n');
+function exportCSV(gran){
+  const rows=currentRows(gran);
+  const head='period,detail,'+CATS.map(c=>c.en).join(',');
+  const body=rows.map(r=>[r.label, r.sub, ...CATS.map(c=>r[c.key].toFixed(1))].join(',')).join('\n');
   const blob=new Blob(['﻿'+head+'\n'+body],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download=`tokyo-weather-${state.sortKey}-${state.sortDir}.csv`;
+  a.download=`tokyo-weather-${gran}.csv`;
   a.click(); URL.revokeObjectURL(a.href);
 }
 
@@ -666,13 +598,10 @@ function exportCSV(){
 function setView(v){
   state.view=v;
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
-  ['table','weekly','monthly','trends','calendar','rankings'].forEach(x=>document.getElementById('view-'+x).classList.toggle('hidden',x!==v));
-  if(v==='weekly') renderWeekly();
-  if(v==='trends') renderTrends();
-  if(v==='monthly') renderMonthly();
+  ['daily','weekly','monthly','calendar','rankings'].forEach(x=>document.getElementById('view-'+x).classList.toggle('hidden',x!==v));
+  if(v==='daily'||v==='weekly'||v==='monthly'){ syncControls(v); renderChart(v); renderTableFor(v); }
   if(v==='calendar') renderCalendar();
   if(v==='rankings') renderRankings();
-  if(v==='table') renderTable();
 }
 function renderAll(){
   renderLegend(); renderCards(); setView(state.view);
@@ -680,32 +609,14 @@ function renderAll(){
 
 /* ---------- init controls ---------- */
 function initControls(){
-  // month filter
-  const mf=document.getElementById('monthFilter');
-  mf.innerHTML=`<option value="0">All months</option>`+MON.map((m,i)=>`<option value="${i+1}">${m} ${MON_JA[i]}</option>`).join('');
-  mf.onchange=()=>{ state.monthFilter=+mf.value; renderTable(); };
-  // heat metric
+  ['daily','weekly','monthly'].forEach(buildGranPanel);
   const hm=document.getElementById('heatMetric');
   hm.innerHTML=CATS.map(c=>`<option value="${c.key}">${c.en} ${c.ja}</option>`).join('');
   hm.onchange=()=>{ state.heatMetric=hm.value; renderCalendar(); };
-  // trend granularity
-  const tg=document.getElementById('trendGran');
-  tg.value=state.trendGran;
-  tg.onchange=()=>{ state.trendGran=tg.value; renderTrends(); };
-  // sort selects
-  document.getElementById('sortKey').onchange=e=>{ state.sortKey=e.target.value; renderTable(); };
-  document.getElementById('sortDir').onchange=e=>{ state.sortDir=e.target.value; renderTable(); };
-  // search
-  document.getElementById('search').oninput=e=>{ state.query=e.target.value; renderTable(); };
-  // export
-  document.getElementById('exportBtn').onclick=exportCSV;
-  // tabs
   document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>setView(b.dataset.view));
-  // modal
   document.getElementById('modalX').onclick=closeModal;
   document.getElementById('modal').onclick=e=>{ if(e.target.id==='modal') closeModal(); };
   document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeModal(); });
-  // file load
   const file=document.getElementById('file'), drop=document.getElementById('drop');
   file.onchange=async e=>{ const f=e.target.files[0]; if(f){ const d=parseCSV(decodeBuf(await f.arrayBuffer())); if(d.length) setData(d, `loaded: ${f.name}`); } };
   ['dragover','dragenter'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault(); drop.classList.add('over');}));
@@ -730,7 +641,6 @@ document.addEventListener('mousemove',e=>{
 /* ---------- boot ---------- */
 (async function(){
   initControls();
-  syncControls();
   const fetched = await tryFetchCSV();
   setData(fetched || EMBEDDED, fetched ? 'loaded from data.csv' : 'embedded snapshot');
 })();
