@@ -26,6 +26,7 @@
   header.top .src{margin-left:auto; font-size:12px; color:var(--muted); text-align:right}
   .drop{border:1.5px dashed var(--line); border-radius:10px; padding:6px 12px; font-size:12px; color:var(--muted); cursor:pointer; transition:.15s; white-space:nowrap}
   .drop:hover,.drop.over{border-color:var(--rain); color:var(--rain); background:#f0f6ff}
+  .srcline{display:flex; gap:14px; align-items:center; flex-wrap:wrap; font-size:12px; color:var(--muted); margin:0 0 18px}
 
   /* legend */
   .legend{display:flex; gap:16px; flex-wrap:wrap; align-items:center; margin:2px 0 18px}
@@ -85,17 +86,6 @@
   .maxcat{font-weight:700}
   .badge{display:inline-block; padding:1px 7px; border-radius:20px; font-size:11px; font-weight:700; color:#fff}
 
-  /* calendar heatmap */
-  .cal{overflow:auto}
-  .calgrid{display:grid; grid-template-columns:38px repeat(31, 1fr); gap:3px; min-width:720px}
-  .calgrid .h{font-size:10px; color:var(--muted); text-align:center; padding-bottom:2px}
-  .calgrid .ml{font-size:12px; font-weight:600; display:flex; align-items:center}
-  .cell{aspect-ratio:1/1; border-radius:4px; background:#f0f2f6; cursor:pointer; min-height:16px}
-  .cell.on:hover{outline:2px solid var(--ink); outline-offset:-1px}
-  .cell.empty{background:transparent; cursor:default}
-  .scale{display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted); margin-top:14px}
-  .scalebar{height:12px; width:180px; border-radius:6px}
-
   /* rankings */
   .ranks{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:18px}
   .rankcol h3{margin:0 0 10px; font-size:14px; display:flex; align-items:center; gap:7px}
@@ -144,37 +134,52 @@
   .mstats .row .vv{font-weight:700; font-variant-numeric:tabular-nums}
 
   footer{text-align:center; color:var(--muted); font-size:12px; margin-top:30px}
-  @media(max-width:560px){
+  @media(max-width:640px){
+    .wrap{padding:16px 12px 56px}
+    header.top{margin-bottom:14px}
+    header.top h1{font-size:19px}
+    .panel{padding:15px 13px}
+    /* tabs: one swipeable row instead of wrapping */
+    .tabs{flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none}
+    .tabs::-webkit-scrollbar{display:none}
+    .tabs button{flex:0 0 auto; padding:9px 13px}
+    /* controls: search gets its own full row, comfy tap targets */
+    .controls{gap:8px}
+    .controls .grp{flex-wrap:wrap}
+    .controls input[type=search]{flex:1 1 100%; min-width:0}
+    select,input[type=search],.btn{padding:9px 11px}
+    /* compact, horizontally scrollable tables */
+    .tbl-wrap{-webkit-overflow-scrolling:touch}
+    th,td{padding:7px 9px}
+    table{font-size:12px}
+    td.bar{width:96px}
+    /* keep the trend chart legible when scaled down */
+    .chart .axlbl{font-size:18px}
+    .chart .ln{stroke-width:2.5}
+    /* summary cards */
     .card .big{font-size:22px}
-    header.top .src{margin-left:0; text-align:left; width:100%}
+    .cards{gap:10px}
+    /* let the legend caption wrap instead of clipping */
+    #legend .item:last-child{margin-left:0; flex-basis:100%}
+    /* detail modal fits narrow screens */
+    .modal-card{padding:20px}
+    .donut{width:104px; height:104px}
+    .donut::after{inset:21px}
+    .donut .dlbl b{font-size:18px}
   }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="top">
-    <div>
-      <h1>☀️ Tokyo Weather Appearance Rates</h1>
-      <div class="sub">For each calendar day, how often it was historically Sunny&nbsp;/&nbsp;Cloudy&nbsp;/&nbsp;Rain&nbsp;/&nbsp;Snow. Values per day sum to ~100%.</div>
-    </div>
-    <div class="src">
-      Source: <a href="https://www.data.jma.go.jp/tokyo/shosai/chiiki/tenki/link.html" target="_blank" rel="noopener">JMA</a><br>
-      <label class="drop" id="drop">⤓ drop / click to load a data.csv
-        <input type="file" id="file" accept=".csv" hidden>
-      </label>
-    </div>
+    <h1>☀️ Tokyo Weather Appearance Rates</h1>
   </header>
-
-  <div class="legend" id="legend"></div>
-
-  <div class="cards" id="cards"></div>
 
   <div class="tabs" id="tabs">
     <button data-view="daily" class="active">📊 Daily</button>
     <button data-view="weekly">📆 Weekly</button>
     <button data-view="monthly">📅 Monthly</button>
-    <button data-view="calendar">🗓️ Calendar heatmap</button>
-    <button data-view="rankings">🏆 Rankings</button>
+    <button data-view="rankings">📋 Summary</button>
   </div>
 
   <!-- DAILY / WEEKLY / MONTHLY — line chart + sortable table, built by JS -->
@@ -182,22 +187,15 @@
   <section class="panel hidden" id="view-weekly"></section>
   <section class="panel hidden" id="view-monthly"></section>
 
-  <!-- CALENDAR -->
-  <section class="panel hidden" id="view-calendar">
-    <h2>Calendar heatmap</h2>
-    <p class="desc">Each cell is one calendar day, shaded by the selected weather type. Darker = higher rate. Hover for details, click to open.</p>
-    <div class="controls">
-      <div class="grp">Show
-        <select id="heatMetric"></select>
-      </div>
-      <div class="spacer"></div>
-    </div>
-    <div class="cal"><div class="calgrid" id="calgrid"></div></div>
-    <div class="scale" id="calscale"></div>
-  </section>
-
-  <!-- RANKINGS -->
+  <!-- RANKINGS / overview -->
   <section class="panel hidden" id="view-rankings">
+    <p class="desc">For each calendar day, how often it was historically Sunny&nbsp;/&nbsp;Cloudy&nbsp;/&nbsp;Rain&nbsp;/&nbsp;Snow. Values per day sum to ~100%.</p>
+    <div class="legend" id="legend"></div>
+    <div class="cards" id="cards"></div>
+    <div class="srcline">
+      Source: <a href="https://www.data.jma.go.jp/tokyo/shosai/chiiki/tenki/link.html" target="_blank" rel="noopener">JMA</a>
+      <label class="drop" id="drop">⤓ drop / click to load a data.csv<input type="file" id="file" accept=".csv" hidden></label>
+    </div>
     <h2>Extremes of the year</h2>
     <p class="desc">The top 12 days for each weather type. Click any day for its full breakdown.</p>
     <div class="ranks" id="ranks"></div>
@@ -232,7 +230,6 @@ let state = {
     monthly:{sortKey:'sunny', sortDir:'desc', monthFilter:0, query:''},
   },
   chartCats:{sunny:true, cloudy:true, rain:true, snow:true},
-  heatMetric:'sunny',
 };
 let dataSource = 'embedded';
 
@@ -516,35 +513,6 @@ function renderChartLegend(gran){
   });
 }
 
-/* ---------- calendar heatmap ---------- */
-function hexToRgb(h){ return [1,3,5].map(i=>parseInt(h.slice(i,i+2),16)); }
-function heatColor(v, max, base){
-  const t = max>0 ? Math.min(1, v/max) : 0;
-  const bg=[240,242,246], c=hexToRgb(base);
-  const e = Math.pow(t,0.85);
-  return `rgb(${bg.map((b,i)=>Math.round(b+(c[i]-b)*e)).join(',')})`;
-}
-function renderCalendar(){
-  const metric=state.heatMetric, base=CATMAP[metric].color;
-  const max=Math.max(...DATA.map(r=>r[metric]));
-  const map={}; DATA.forEach(r=>map[`${r.m}-${r.d}`]=r);
-  let html = `<div class="h"></div>` + Array.from({length:31},(_,i)=>`<div class="h">${i+1}</div>`).join('');
-  for(let m=1;m<=12;m++){
-    html += `<div class="ml">${MON[m-1]}</div>`;
-    for(let d=1;d<=31;d++){
-      const r=map[`${m}-${d}`];
-      if(!r){ html+=`<div class="cell empty"></div>`; continue; }
-      html+=`<div class="cell on" style="background:${heatColor(r[metric],max,base)}" data-date="${r.date}" data-tip='${periodTip(r)}'></div>`;
-    }
-  }
-  document.getElementById('calgrid').innerHTML=html;
-  document.querySelectorAll('#calgrid .cell.on').forEach(c=>c.onclick=()=>openDay(c.dataset.date));
-  const grad=`linear-gradient(90deg, ${heatColor(0,max,base)}, ${heatColor(max,max,base)})`;
-  document.getElementById('calscale').innerHTML=
-    `<span>Low (0%)</span><div class="scalebar" style="background:${grad}"></div><span>High (${max.toFixed(0)}%)</span>
-     <span style="margin-left:12px">showing <b style="color:${base}">${CATMAP[metric].en}</b></span>`;
-}
-
 /* ---------- rankings ---------- */
 function renderRankings(){
   const N=12;
@@ -597,9 +565,8 @@ function exportCSV(gran){
 function setView(v){
   state.view=v;
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
-  ['daily','weekly','monthly','calendar','rankings'].forEach(x=>document.getElementById('view-'+x).classList.toggle('hidden',x!==v));
+  ['daily','weekly','monthly','rankings'].forEach(x=>document.getElementById('view-'+x).classList.toggle('hidden',x!==v));
   if(v==='daily'||v==='weekly'||v==='monthly'){ syncControls(v); renderChart(v); renderTableFor(v); }
-  if(v==='calendar') renderCalendar();
   if(v==='rankings') renderRankings();
 }
 function renderAll(){
@@ -609,9 +576,6 @@ function renderAll(){
 /* ---------- init controls ---------- */
 function initControls(){
   ['daily','weekly','monthly'].forEach(buildGranPanel);
-  const hm=document.getElementById('heatMetric');
-  hm.innerHTML=CATS.map(c=>`<option value="${c.key}">${c.en}</option>`).join('');
-  hm.onchange=()=>{ state.heatMetric=hm.value; renderCalendar(); };
   document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>setView(b.dataset.view));
   document.getElementById('modalX').onclick=closeModal;
   document.getElementById('modal').onclick=e=>{ if(e.target.id==='modal') closeModal(); };
